@@ -37,6 +37,7 @@ email                : morb at ozemail dot com dot au
 #include <limits>
 #include <QSet>
 
+class QgsSimpleFeatureGeometryEngine;
 class QgsGeometryEngine;
 class QgsVectorLayer;
 class QgsMapToPixel;
@@ -804,8 +805,14 @@ class CORE_EXPORT QgsGeometry
     QgsPolyline smoothLine( const QgsPolyline &polyline, const unsigned int iterations = 1, const double offset = 0.25 ) const;
 
     /** Creates and returns a new geometry engine
+     *
+     * @deprecated Use `createGeometryEngineV2()` instead
      */
-    static QgsGeometryEngine* createGeometryEngine( const QgsAbstractGeometryV2* geometry );
+    Q_DECL_DEPRECATED static QgsGeometryEngine* createGeometryEngine( const QgsAbstractGeometryV2* geometry );
+
+    /** Creates and returns a new geometry engine
+     */
+    static QgsSimpleFeatureGeometryEngine* createGeometryEngineV2( const QgsGeometry& geometry, double precision = 0 );
 
     /** Upgrades a point list from QgsPoint to QgsPointV2
      * @param input list of QgsPoint objects to be upgraded

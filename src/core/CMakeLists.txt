@@ -343,6 +343,8 @@ SET(QGIS_CORE_SRCS
   geometry/qgsgeometryutils.cpp
   geometry/qgsgeos.cpp
   geometry/qgsinternalgeometryengine.cpp
+  geometry/qgssimplefeaturegeometryengine.cpp
+  geometry/qgsgeosgeometryengine.cpp
   geometry/qgslinestringv2.cpp
   geometry/qgsmulticurvev2.cpp
   geometry/qgsmultilinestringv2.cpp
@@ -836,6 +838,8 @@ SET(QGIS_CORE_HDRS
   geometry/qgsabstractgeometryv2.h
   geometry/qgsgeometry.h
   geometry/qgsinternalgeometryengine.h
+  geometry/qgssimplefeaturegeometryengine.h
+  geometry/qgsgeosgeometryengine.h
   geometry/qgspointv2.h
   geometry/qgswkbptr.h
   geometry/qgswkbtypes.h

@@ -5,7 +5,7 @@
  *  email                : smani@sourcepole.ch                             *
  ***************************************************************************/
 
-#include "qgsgeometryengine.h"
+#include "qgssimplefeaturegeometryengine.h"
 #include "qgsgeometryduplicatecheck.h"
 #include "qgsspatialindex.h"
 #include "qgsgeometry.h"
@@ -22,7 +22,7 @@ void QgsGeometryDuplicateCheck::collectErrors( QList<QgsGeometryCheckError*>& er
     {
       continue;
     }
-    QgsGeometryEngine* geomEngine = QgsGeomUtils::createGeomEngine( feature.geometry()->geometry(), QgsGeometryCheckPrecision::tolerance() );
+    QgsSimpleFeatureGeometryEngine* geomEngine = QgsGeomUtils::createGeometryEngineV2( *feature.geometry(), QgsGeometryCheckPrecision::tolerance() );
 
     QList<QgsFeatureId> duplicates;
     QgsFeatureIds ids = mFeaturePool->getIntersects( feature.geometry()->geometry()->boundingBox() );
@@ -39,16 +39,15 @@ void QgsGeometryDuplicateCheck::collectErrors( QList<QgsGeometryCheckError*>& er
         continue;
       }
       QString errMsg;
-      QgsAbstractGeometryV2* diffGeom = geomEngine->symDifference( *testFeature.geometry()->geometry(), &errMsg );
-      if ( diffGeom && diffGeom->area() < QgsGeometryCheckPrecision::tolerance() )
+      QgsGeometry diffGeom = geomEngine->symDifference( *testFeature.geometry(), &errMsg );
+      if ( !diffGeom.isEmpty() && diffGeom.geometry()->area() < QgsGeometryCheckPrecision::tolerance() )
       {
         duplicates.append( id );
       }
-      else if ( !diffGeom )
+      else if ( diffGeom.isEmpty() )
       {
         messages.append( tr( "Duplicate check between features %1 and %2: %3" ).arg( feature.id() ).arg( testFeature.id() ).arg( errMsg ) );
       }
-      delete diffGeom;
     }
     if ( !duplicates.isEmpty() )
     {
@@ -74,7 +73,7 @@ void QgsGeometryDuplicateCheck::fixError( QgsGeometryCheckError* error, int meth
   }
   else if ( method == RemoveDuplicates )
   {
-    QgsGeometryEngine* geomEngine = QgsGeomUtils::createGeomEngine( feature.geometry()->geometry(), QgsGeometryCheckPrecision::tolerance() );
+    QgsSimpleFeatureGeometryEngine* geomEngine = QgsGeomUtils::createGeometryEngineV2( *feature.geometry(), QgsGeometryCheckPrecision::tolerance() );
 
     QgsGeometryDuplicateCheckError* duplicateError = static_cast<QgsGeometryDuplicateCheckError*>( error );
     Q_FOREACH ( QgsFeatureId id, duplicateError->duplicates() )
@@ -84,14 +83,12 @@ void QgsGeometryDuplicateCheck::fixError( QgsGeometryCheckError* error, int meth
       {
         continue;
       }
-      QgsAbstractGeometryV2* diffGeom = geomEngine->symDifference( *testFeature.geometry()->geometry() );
-      if ( diffGeom && diffGeom->area() < QgsGeometryCheckPrecision::tolerance() )
+      QgsGeometry diffGeom = geomEngine->symDifference( *testFeature.geometry() );
+      if ( !diffGeom.isEmpty() && diffGeom.geometry()->area() < QgsGeometryCheckPrecision::tolerance() )
       {
         mFeaturePool->deleteFeature( testFeature );
         changes[id].append( Change( ChangeFeature, ChangeRemoved ) );
       }
-
-      delete diffGeom;
     }
     delete geomEngine;
     error->setFixed( method );

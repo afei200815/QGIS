@@ -24,6 +24,7 @@ email                : morb at ozemail dot com dot au
 #include "qgsgeometryfactory.h"
 #include "qgsgeometryutils.h"
 #include "qgsinternalgeometryengine.h"
+#include "qgsgeosgeometryengine.h"
 #include "qgsgeos.h"
 #include "qgsapplication.h"
 #include "qgslogger.h"
@@ -54,7 +55,7 @@ email                : morb at ozemail dot com dot au
 struct QgsGeometryPrivate
 {
   QgsGeometryPrivate(): ref( 1 ), geometry( nullptr ), mWkb( nullptr ), mWkbSize( 0 ), mGeos( nullptr ) {}
-  ~QgsGeometryPrivate() { delete geometry; delete[] mWkb; GEOSGeom_destroy_r( QgsGeos::getGEOSHandler(), mGeos ); }
+  ~QgsGeometryPrivate() { delete geometry; delete[] mWkb; GEOSGeom_destroy_r( QgsGeosGeometryEngine::getGEOSHandler(), mGeos ); }
   QAtomicInt ref;
   QgsAbstractGeometryV2* geometry;
   mutable const unsigned char* mWkb; //store wkb pointer for backward compatibility
@@ -120,7 +121,7 @@ void QgsGeometry::removeWkbGeos()
   d->mWkbSize = 0;
   if ( d->mGeos )
   {
-    GEOSGeom_destroy_r( QgsGeos::getGEOSHandler(), d->mGeos );
+    GEOSGeom_destroy_r( QgsGeosGeometryEngine::getGEOSHandler(), d->mGeos );
     d->mGeos = nullptr;
   }
 }
@@ -533,14 +534,16 @@ double QgsGeometry::sqrDistToVertexAt( QgsPoint& point, int atVertex ) const
 
 QgsGeometry QgsGeometry::nearestPoint( const QgsGeometry& other ) const
 {
-  QgsGeos geos( d->geometry );
-  return geos.closestPoint( other );
+  QgsGeosGeometryEngine engine( *this );
+
+  return engine.closestPoint( other );
 }
 
 QgsGeometry QgsGeometry::shortestLine( const QgsGeometry& other ) const
 {
-  QgsGeos geos( d->geometry );
-  return geos.shortestLine( other );
+  QgsGeosGeometryEngine engine( *this );
+
+  return engine.shortestLine( other );
 }
 
 double QgsGeometry::closestVertexWithContext( const QgsPoint& point, int& atVertex ) const
@@ -787,18 +790,18 @@ int QgsGeometry::makeDifference( const QgsGeometry* other )
     return 0;
   }
 
-  QgsGeos geos( d->geometry );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry diffGeom = geomEngine->intersection( *other );
 
-  QgsAbstractGeometryV2* diffGeom = geos.intersection( *( other->geometry() ) );
-  if ( !diffGeom )
+  if ( diffGeom.isEmpty() )
   {
     return 1;
   }
 
   detach( false );
-
   delete d->geometry;
-  d->geometry = diffGeom;
+  d->geometry = diffGeom.geometry();
+  d->ref.ref();
   removeWkbGeos();
   return 0;
 }
@@ -827,8 +830,8 @@ bool QgsGeometry::intersects( const QgsGeometry* geometry ) const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.intersects( *( geometry->d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->intersects( *geometry );
 }
 
 bool QgsGeometry::contains( const QgsPoint* p ) const
@@ -838,9 +841,9 @@ bool QgsGeometry::contains( const QgsPoint* p ) const
     return false;
   }
 
-  QgsPointV2 pt( p->x(), p->y() );
-  QgsGeos geos( d->geometry );
-  return geos.contains( pt );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QScopedPointer<QgsGeometry> geometry( QgsGeometry::fromPoint( *p ) );
+  return geomEngine->contains( *geometry );
 }
 
 bool QgsGeometry::contains( const QgsGeometry* geometry ) const
@@ -850,8 +853,8 @@ bool QgsGeometry::contains( const QgsGeometry* geometry ) const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.contains( *( geometry->d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->contains( *geometry );
 }
 
 bool QgsGeometry::disjoint( const QgsGeometry* geometry ) const
@@ -861,8 +864,8 @@ bool QgsGeometry::disjoint( const QgsGeometry* geometry ) const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.disjoint( *( geometry->d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->disjoint( *geometry );
 }
 
 bool QgsGeometry::equals( const QgsGeometry* geometry ) const
@@ -872,8 +875,8 @@ bool QgsGeometry::equals( const QgsGeometry* geometry ) const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.isEqual( *( geometry->d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->isEqual( *geometry );
 }
 
 bool QgsGeometry::touches( const QgsGeometry* geometry ) const
@@ -883,8 +886,8 @@ bool QgsGeometry::touches( const QgsGeometry* geometry ) const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.touches( *( geometry->d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->touches( *geometry );
 }
 
 bool QgsGeometry::overlaps( const QgsGeometry* geometry ) const
@@ -894,8 +897,8 @@ bool QgsGeometry::overlaps( const QgsGeometry* geometry ) const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.overlaps( *( geometry->d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->overlaps( *geometry );
 }
 
 bool QgsGeometry::within( const QgsGeometry* geometry ) const
@@ -905,8 +908,8 @@ bool QgsGeometry::within( const QgsGeometry* geometry ) const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.within( *( geometry->d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->within( *geometry );
 }
 
 bool QgsGeometry::crosses( const QgsGeometry* geometry ) const
@@ -916,8 +919,8 @@ bool QgsGeometry::crosses( const QgsGeometry* geometry ) const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.crosses( *( geometry->d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->crosses( *geometry );
 }
 
 QString QgsGeometry::exportToWkt( int precision ) const
@@ -1225,11 +1228,12 @@ double QgsGeometry::area() const
   {
     return -1.0;
   }
-  QgsGeos g( d->geometry );
+
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
 
 #if 0
   //debug: compare geos area with calculation in QGIS
-  double geosArea = g.area();
+  double geosArea = geomEngine->area();
   double qgisArea = 0;
   QgsSurfaceV2* surface = dynamic_cast<QgsSurfaceV2*>( d->geometry );
   if ( surface )
@@ -1238,7 +1242,7 @@ double QgsGeometry::area() const
   }
 #endif
 
-  return g.area();
+  return geomEngine->area();
 }
 
 double QgsGeometry::length() const
@@ -1247,8 +1251,8 @@ double QgsGeometry::length() const
   {
     return -1.0;
   }
-  QgsGeos g( d->geometry );
-  return g.length();
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->length();
 }
 
 double QgsGeometry::distance( const QgsGeometry& geom ) const
@@ -1258,8 +1262,8 @@ double QgsGeometry::distance( const QgsGeometry& geom ) const
     return -1.0;
   }
 
-  QgsGeos g( d->geometry );
-  return g.distance( *( geom.d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->distance( geom );
 }
 
 QgsGeometry* QgsGeometry::buffer( double distance, int segments ) const
@@ -1269,13 +1273,10 @@ QgsGeometry* QgsGeometry::buffer( double distance, int segments ) const
     return nullptr;
   }
 
-  QgsGeos g( d->geometry );
-  QgsAbstractGeometryV2* geom = g.buffer( distance, segments );
-  if ( !geom )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( geom );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->buffer( distance, segments );
+
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::buffer( double distance, int segments, int endCapStyle, int joinStyle, double mitreLimit ) const
@@ -1285,13 +1286,10 @@ QgsGeometry* QgsGeometry::buffer( double distance, int segments, int endCapStyle
     return nullptr;
   }
 
-  QgsGeos g( d->geometry );
-  QgsAbstractGeometryV2* geom = g.buffer( distance, segments, endCapStyle, joinStyle, mitreLimit );
-  if ( !geom )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( geom );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->buffer( distance, segments, endCapStyle, joinStyle, mitreLimit );
+
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::offsetCurve( double distance, int segments, int joinStyle, double mitreLimit ) const
@@ -1301,13 +1299,10 @@ QgsGeometry* QgsGeometry::offsetCurve( double distance, int segments, int joinSt
     return nullptr;
   }
 
-  QgsGeos geos( d->geometry );
-  QgsAbstractGeometryV2* offsetGeom = geos.offsetCurve( distance, segments, joinStyle, mitreLimit );
-  if ( !offsetGeom )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( offsetGeom );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->offsetCurve( distance, segments, joinStyle, mitreLimit );
+
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::simplify( double tolerance ) const
@@ -1317,13 +1312,10 @@ QgsGeometry* QgsGeometry::simplify( double tolerance ) const
     return nullptr;
   }
 
-  QgsGeos geos( d->geometry );
-  QgsAbstractGeometryV2* simplifiedGeom = geos.simplify( tolerance );
-  if ( !simplifiedGeom )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( simplifiedGeom );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->simplify( tolerance, true );
+
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::centroid() const
@@ -1333,14 +1325,11 @@ QgsGeometry* QgsGeometry::centroid() const
     return nullptr;
   }
 
-  QgsGeos geos( d->geometry );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
   QgsPointV2 centroid;
-  bool ok = geos.centroid( centroid );
-  if ( !ok )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( centroid.clone() );
+  bool ok = geomEngine->centroid( centroid );
+
+  return ok ? new QgsGeometry( centroid.clone() ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::pointOnSurface() const
@@ -1350,14 +1339,11 @@ QgsGeometry* QgsGeometry::pointOnSurface() const
     return nullptr;
   }
 
-  QgsGeos geos( d->geometry );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
   QgsPointV2 pt;
-  bool ok = geos.pointOnSurface( pt );
-  if ( !ok )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( pt.clone() );
+  bool ok = geomEngine->pointOnSurface( pt );
+
+  return ok ? new QgsGeometry( pt.clone() ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::convexHull() const
@@ -1366,13 +1352,11 @@ QgsGeometry* QgsGeometry::convexHull() const
   {
     return nullptr;
   }
-  QgsGeos geos( d->geometry );
-  QgsAbstractGeometryV2* cHull = geos.convexHull();
-  if ( !cHull )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( cHull );
+
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->convexHull();
+
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::interpolate( double distance ) const
@@ -1381,13 +1365,11 @@ QgsGeometry* QgsGeometry::interpolate( double distance ) const
   {
     return nullptr;
   }
-  QgsGeos geos( d->geometry );
-  QgsAbstractGeometryV2* result = geos.interpolate( distance );
-  if ( !result )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( result );
+
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->interpolate( distance );
+
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::intersection( const QgsGeometry* geometry ) const
@@ -1397,10 +1379,10 @@ QgsGeometry* QgsGeometry::intersection( const QgsGeometry* geometry ) const
     return nullptr;
   }
 
-  QgsGeos geos( d->geometry );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->intersection( *geometry );
 
-  QgsAbstractGeometryV2* resultGeom = geos.intersection( *( geometry->d->geometry ) );
-  return new QgsGeometry( resultGeom );
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::combine( const QgsGeometry* geometry ) const
@@ -1410,14 +1392,10 @@ QgsGeometry* QgsGeometry::combine( const QgsGeometry* geometry ) const
     return nullptr;
   }
 
-  QgsGeos geos( d->geometry );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->combine( *geometry );
 
-  QgsAbstractGeometryV2* resultGeom = geos.combine( *( geometry->d->geometry ) );
-  if ( !resultGeom )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( resultGeom );
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::difference( const QgsGeometry* geometry ) const
@@ -1427,14 +1405,10 @@ QgsGeometry* QgsGeometry::difference( const QgsGeometry* geometry ) const
     return nullptr;
   }
 
-  QgsGeos geos( d->geometry );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->difference( *geometry );
 
-  QgsAbstractGeometryV2* resultGeom = geos.difference( *( geometry->d->geometry ) );
-  if ( !resultGeom )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( resultGeom );
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry* QgsGeometry::symDifference( const QgsGeometry* geometry ) const
@@ -1444,14 +1418,10 @@ QgsGeometry* QgsGeometry::symDifference( const QgsGeometry* geometry ) const
     return nullptr;
   }
 
-  QgsGeos geos( d->geometry );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  QgsGeometry resultGeom = geomEngine->symDifference( *geometry );
 
-  QgsAbstractGeometryV2* resultGeom = geos.symDifference( *( geometry->d->geometry ) );
-  if ( !resultGeom )
-  {
-    return nullptr;
-  }
-  return new QgsGeometry( resultGeom );
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 QgsGeometry QgsGeometry::extrude( double x, double y )
@@ -1583,8 +1553,8 @@ bool QgsGeometry::isGeosValid() const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.isValid();
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->isValid();
 }
 
 bool QgsGeometry::isGeosEqual( const QgsGeometry& g ) const
@@ -1594,8 +1564,8 @@ bool QgsGeometry::isGeosEqual( const QgsGeometry& g ) const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.isEqual( *( g.d->geometry ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->isEqual( g );
 }
 
 bool QgsGeometry::isGeosEmpty() const
@@ -1605,26 +1575,16 @@ bool QgsGeometry::isGeosEmpty() const
     return false;
   }
 
-  QgsGeos geos( d->geometry );
-  return geos.isEmpty();
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( *this ) );
+  return geomEngine->isEmpty();
 }
 
 QgsGeometry *QgsGeometry::unaryUnion( const QList<QgsGeometry*> &geometryList )
 {
-  QgsGeos geos( nullptr );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> geomEngine( QgsGeometry::createGeometryEngineV2( QgsGeometry() ) );
+  QgsGeometry resultGeom = geomEngine->combine( geometryList );
 
-  QList<QgsAbstractGeometryV2*> geomV2List;
-  QList<QgsGeometry*>::const_iterator it = geometryList.constBegin();
-  for ( ; it != geometryList.constEnd(); ++it )
-  {
-    if ( *it )
-    {
-      geomV2List.append(( *it )->geometry() );
-    }
-  }
-
-  QgsAbstractGeometryV2* geom = geos.combine( geomV2List );
-  return new QgsGeometry( geom );
+  return !resultGeom.isEmpty() ? new QgsGeometry( resultGeom ) : nullptr;
 }
 
 void QgsGeometry::convertToStraightSegment()
@@ -1819,7 +1779,7 @@ void QgsGeometry::convertPolygon( const QgsPolygonV2& input, QgsPolygon& output 
 
 GEOSContextHandle_t QgsGeometry::getGEOSHandler()
 {
-  return QgsGeos::getGEOSHandler();
+  return QgsGeosGeometryEngine::getGEOSHandler();
 }
 
 QgsGeometry *QgsGeometry::fromQPointF( QPointF point )
@@ -2328,6 +2288,12 @@ QgsGeometry* QgsGeometry::convertToPolygon( bool destMultipart ) const
 QgsGeometryEngine* QgsGeometry::createGeometryEngine( const QgsAbstractGeometryV2* geometry )
 {
   return new QgsGeos( geometry );
+}
+
+// Creates and returns a new geometry engine
+QgsSimpleFeatureGeometryEngine* QgsGeometry::createGeometryEngineV2( const QgsGeometry& geometry, double precision )
+{
+  return new QgsGeosGeometryEngine( geometry, precision );
 }
 
 QDataStream& operator<<( QDataStream& out, const QgsGeometry& geometry )

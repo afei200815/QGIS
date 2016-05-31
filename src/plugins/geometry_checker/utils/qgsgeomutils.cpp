@@ -23,6 +23,10 @@
 namespace QgsGeomUtils
 {
 
+  QgsSimpleFeatureGeometryEngine* createGeometryEngineV2( const QgsGeometry& geometry, double tolerance )
+  {
+    return QgsGeometry::createGeometryEngineV2( geometry, tolerance );
+  }
   QgsGeometryEngine* createGeomEngine( QgsAbstractGeometryV2* geometry, double tolerance )
   {
     return new QgsGeos( geometry, tolerance );

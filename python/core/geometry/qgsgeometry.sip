@@ -759,8 +759,14 @@ class QgsGeometry
     QgsPolyline smoothLine( const QgsPolyline &polyline, const unsigned int iterations = 1, const double offset = 0.25 ) const;
 
     /** Creates and returns a new geometry engine
+     *
+     * @deprecated Use `createGeometryEngineV2()` instead
      */
-    static QgsGeometryEngine* createGeometryEngine( const QgsAbstractGeometryV2* geometry ) /Factory/;
+    static QgsGeometryEngine* createGeometryEngine( const QgsAbstractGeometryV2* geometry ) /Deprecated/;
+
+    /** Creates and returns a new geometry engine
+     */
+    static QgsSimpleFeatureGeometryEngine* createGeometryEngineV2( const QgsGeometry& geometry, double precision = 0 ) /Factory/;
 
     /** Upgrades a point list from QgsPoint to QgsPointV2
      * @param input list of QgsPoint objects to be upgraded

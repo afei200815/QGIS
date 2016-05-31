@@ -19,14 +19,17 @@
 
 #include "geometry/qgsabstractgeometryv2.h"
 #include "geometry/qgspointv2.h"
+#include "geometry/qgsgeometry.h"
 #include <qmath.h>
 
+class QgsSimpleFeatureGeometryEngine;
 class QgsGeometryEngine;
 
 namespace QgsGeomUtils
 {
 
-  QgsGeometryEngine *createGeomEngine( QgsAbstractGeometryV2* geometry, double tolerance );
+  QgsSimpleFeatureGeometryEngine* createGeometryEngineV2( const QgsGeometry& geometry, double tolerance );
+  Q_DECL_DEPRECATED QgsGeometryEngine *createGeomEngine( QgsAbstractGeometryV2* geometry, double tolerance );
 
   QgsAbstractGeometryV2* getGeomPart( QgsAbstractGeometryV2* geom, int partIdx );
 

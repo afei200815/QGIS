@@ -29,7 +29,7 @@
 #include "qgsdistancearea.h"
 #include "qgsfeature.h"
 #include "qgsgeometry.h"
-#include "qgsgeometryengine.h"
+#include "qgssimplefeaturegeometryengine.h"
 #include "qgsgeometryutils.h"
 #include "qgslogger.h"
 #include "qgsmaplayerregistry.h"
@@ -44,6 +44,7 @@
 #include "qgsgeometrycollectionv2.h"
 #include "qgspointv2.h"
 #include "qgspolygonv2.h"
+#include "qgslinestringv2.h"
 #include "qgsmultipointv2.h"
 #include "qgsmultilinestringv2.h"
 #include "qgscurvepolygonv2.h"
@@ -2205,19 +2206,19 @@ static QVariant fcnRelate( const QVariantList& values, const QgsExpressionContex
   if ( fGeom.isEmpty() || sGeom.isEmpty() )
     return QVariant();
 
-  QScopedPointer<QgsGeometryEngine> engine( QgsGeometry::createGeometryEngine( fGeom.geometry() ) );
+  QScopedPointer<QgsSimpleFeatureGeometryEngine> engine( QgsGeometry::createGeometryEngineV2( fGeom ) );
 
   if ( values.length() == 2 )
   {
     //two geometry arguments, return relation
-    QString result = engine->relate( *sGeom.geometry() );
+    QString result = engine->relate( sGeom );
     return QVariant::fromValue( result );
   }
   else
   {
     //three arguments, test pattern
     QString pattern = getStringValue( values.at( 2 ), parent );
-    bool result = engine->relatePattern( *sGeom.geometry(), pattern );
+    bool result = engine->relatePattern( sGeom, pattern );
     return QVariant::fromValue( result );
   }
 }

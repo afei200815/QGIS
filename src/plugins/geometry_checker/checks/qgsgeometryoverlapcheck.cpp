@@ -5,6 +5,7 @@
  *  email                : smani@sourcepole.ch                             *
  ***************************************************************************/
 
+#include "qgssimplefeaturegeometryengine.h"
 #include "qgsgeometryengine.h"
 #include "qgsgeometryoverlapcheck.h"
 #include "../utils/qgsfeaturepool.h"
@@ -20,8 +21,7 @@ void QgsGeometryOverlapCheck::collectErrors( QList<QgsGeometryCheckError*>& erro
     {
       continue;
     }
-    QgsAbstractGeometryV2* geom = feature.geometry()->geometry();
-    QgsGeometryEngine* geomEngine = QgsGeomUtils::createGeomEngine( geom, QgsGeometryCheckPrecision::tolerance() );
+    QgsSimpleFeatureGeometryEngine* geomEngine = QgsGeomUtils::createGeometryEngineV2( *feature.geometry(), QgsGeometryCheckPrecision::tolerance() );
 
     QgsFeatureIds ids = mFeaturePool->getIntersects( feature.geometry()->boundingBox() );
     Q_FOREACH ( QgsFeatureId otherid, ids )
@@ -39,11 +39,12 @@ void QgsGeometryOverlapCheck::collectErrors( QList<QgsGeometryCheckError*>& erro
       }
 
       QString errMsg;
-      if ( geomEngine->overlaps( *otherFeature.geometry()->geometry(), &errMsg ) )
+      if ( geomEngine->overlaps( *otherFeature.geometry(), &errMsg ) )
       {
-        QgsAbstractGeometryV2* interGeom = geomEngine->intersection( *otherFeature.geometry()->geometry() );
-        if ( interGeom && !interGeom->isEmpty() )
+        QgsGeometry interGeometry = geomEngine->intersection( *otherFeature.geometry() );
+        if ( !interGeometry.isEmpty() )
         {
+          QgsAbstractGeometryV2* interGeom = interGeometry.geometry();
           QgsGeomUtils::filter1DTypes( interGeom );
           for ( int iPart = 0, nParts = interGeom->partCount(); iPart < nParts; ++iPart )
           {
@@ -58,7 +59,6 @@ void QgsGeometryOverlapCheck::collectErrors( QList<QgsGeometryCheckError*>& erro
         {
           messages.append( tr( "Overlap check between features %1 and %2: %3" ).arg( feature.id() ).arg( otherFeature.id() ).arg( errMsg ) );
         }
-        delete interGeom;
       }
     }
     delete geomEngine;

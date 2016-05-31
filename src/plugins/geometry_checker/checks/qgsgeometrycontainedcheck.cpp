@@ -5,7 +5,7 @@
  *  email                : smani@sourcepole.ch                             *
  ***************************************************************************/
 
-#include "qgsgeometryengine.h"
+#include "qgssimplefeaturegeometryengine.h"
 #include "qgsgeometrycontainedcheck.h"
 #include "../utils/qgsfeaturepool.h"
 
@@ -21,7 +21,7 @@ void QgsGeometryContainedCheck::collectErrors( QList<QgsGeometryCheckError*>& er
       continue;
     }
 
-    QgsGeometryEngine* geomEngine = QgsGeomUtils::createGeomEngine( feature.geometry()->geometry(), QgsGeometryCheckPrecision::tolerance() );
+    QgsSimpleFeatureGeometryEngine* geomEngine = QgsGeomUtils::createGeometryEngineV2( *feature.geometry(), QgsGeometryCheckPrecision::tolerance() );
 
     QgsFeatureIds ids = mFeaturePool->getIntersects( feature.geometry()->geometry()->boundingBox() );
     Q_FOREACH ( QgsFeatureId otherid, ids )
@@ -37,7 +37,7 @@ void QgsGeometryContainedCheck::collectErrors( QList<QgsGeometryCheckError*>& er
       }
 
       QString errMsg;
-      if ( geomEngine->within( *otherFeature.geometry()->geometry(), &errMsg ) )
+      if ( geomEngine->within( *otherFeature.geometry(), &errMsg ) )
       {
         errors.append( new QgsGeometryContainedCheckError( this, featureid, feature.geometry()->geometry()->centroid(), otherid ) );
       }
@@ -64,9 +64,9 @@ void QgsGeometryContainedCheck::fixError( QgsGeometryCheckError* error, int meth
   }
 
   // Check if error still applies
-  QgsGeometryEngine* geomEngine = QgsGeomUtils::createGeomEngine( feature.geometry()->geometry(), QgsGeometryCheckPrecision::tolerance() );
+  QgsSimpleFeatureGeometryEngine* geomEngine = QgsGeomUtils::createGeometryEngineV2( *feature.geometry(), QgsGeometryCheckPrecision::tolerance() );
 
-  if ( !geomEngine->within( *otherFeature.geometry()->geometry() ) )
+  if ( !geomEngine->within( *otherFeature.geometry() ) )
   {
     delete geomEngine;
     error->setObsolete();
